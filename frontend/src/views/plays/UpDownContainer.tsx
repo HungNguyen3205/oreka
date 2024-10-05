@@ -12,6 +12,9 @@ import { getToast } from "../../utils";
 import UserList from "./UserList";
 import { UpDownContract } from "../../contracts/UpDownContract";
 import { BinaryOptionMarketContract } from "../../contracts/BinaryOptionMarketContract";
+import { ethers } from "ethers";
+import ContractBalance  from "../../components/Contractbalance";
+import { SMART_CONTRACT_ADDRESS, AGGREGATORS_URL } from '../../configs/constants';
 
 const DEFAULT_SECOND = 30;
 
@@ -19,14 +22,14 @@ export default function UpDownContainer() {
   const dispatch = useAppDispatch();
   const [waiting, setWaiting] = useState<boolean>(false);
   const [countDown, setCountDown] = useState<number>(0);
-  const [coinData, setCoinData] = useState([]);
+  const [coinData, setCoinData] = useState<any[]>([]);
   const { walletInfo, web3Provider, point } = useAppSelector(
     (state) => state.account
   );
 
-  const [headTail, setHeadTail] = React.useState<UP_DOWN_TYPE | undefined>();
-  const [smAddress, setSmAddress] = React.useState<string>("");
-  const [price, setPrice] = React.useState<number>();
+  const [headTail, setHeadTail] = useState<UP_DOWN_TYPE | undefined>();
+  const [smAddress, setSmAddress] = useState<string>("");
+  const [price, setPrice] = useState<number>();
   const toast = useToast();
 
   const getLastedPriceByAddress = useCallback(async () => {
@@ -72,10 +75,9 @@ export default function UpDownContainer() {
   };
 
   const handleStartNow = async () => {
-    if (headTail === undefined || smAddress === undefined || !web3Provider)
-      return;
+    if (headTail === undefined || smAddress === "" || !web3Provider) return;
     if (point < 5) {
-      toast(getToast("your scores isn't enough."));
+      toast(getToast("Your scores aren't enough."));
       return;
     }
     try {
@@ -94,30 +96,32 @@ export default function UpDownContainer() {
         })
       );
     } catch (er: any) {
-      toast(getToast(er));
+      toast(getToast(er.message || er));
     }
   };
 
-  useEffect(async () => {
+  useEffect(() => {
     if (coinData.length) {
       return;
     }
 
-    
-    coinData.push({ 
-      value: "0x5fbdb2315678afecb367f032d93f642f64180aa3", 
-      lable: "WIF/USD" 
-    });
-  });
+    setCoinData((prevData) => [
+      ...prevData,
+      {
+        value: "0x5fbdb2315678afecb367f032d93f642f64180aa3",
+        lable: "WIF/USD",
+      },
+    ]);
+  }, [coinData]);
 
   useEffect(() => {
-    if (countDown) {
+    if (countDown > 0) {
       const interval = setInterval(() => {
         setCountDown((cd) => cd - 1);
       }, 1000);
       return () => clearInterval(interval);
     }
-  });
+  }, [countDown]);
 
   useEffect(() => {
     getLastedPriceByAddress();
@@ -130,25 +134,43 @@ export default function UpDownContainer() {
   }, [countDown, waiting]);
 
   const handleBidding = async () => {
-    if (headTail === undefined || smAddress === undefined || !web3Provider)
-      return;
+    if (headTail === undefined || smAddress === "" || !web3Provider) return;
     try {
-      const sm = new BinaryOptionMarketContract(web3Provider, "0x9fe46736679d2d9a65f0992f2272de9f3c7fa6e0");
-      const rs = await sm.bid(0, "0.05");
-    
-      // dispatch(
-      //   setPickItemAction({
-      //     startAt: new Date(),
-      //     price: rs.answer,
-      //     yourPick: `${
-      //       coinData.find((p) => p.value === smAddress)?.lable || ""
-      //     } (${headTail === UP_DOWN_TYPE.HEAD ? "UP" : "DOWN"})`,
-      //   })
-      // );
+      const sm = new BinaryOptionMarketContract(
+        web3Provider,
+        "0xB69Dc3789f1De9524F7Ae37BCe56e3Be489F06A4"
+      );
+      await sm.bid(0, "0.05");
     } catch (er: any) {
-      toast(getToast(er));
+      toast(getToast(er.message || er));
     }
-  }
+  };
+
+  const [balance, setBalance] = useState("0"); // Khai báo state để lưu trữ số dư
+
+  useEffect(() => {
+    const fetchBalance = async () => {
+      try {
+        // Kết nối với Ethereum thông qua MetaMask hoặc provider mặc định
+        const provider = new ethers.providers.Web3Provider(window.ethereum);
+        
+        // Lấy số dư từ địa chỉ ví (balance trả về là số wei)
+        const balanceInWei = await provider.getBalance(SMARTCONTRACTSADRESS);
+        
+        // Chuyển đổi từ wei sang ether
+        const balanceInEther = ethers.utils.formatEther(balanceInWei);
+        
+        // Cập nhật state balance
+        setBalance(balanceInEther);
+      } catch (error) {
+        console.error("Error fetching balance: ", error);
+      }
+    };
+
+    // Gọi hàm fetchBalance khi component được render
+    fetchBalance();
+  }, []);
+
 
   return (
     <>
@@ -160,11 +182,15 @@ export default function UpDownContainer() {
         direction="column"
       >
         <VStack w={{ base: "100%", lg: "30%" }}>
+
+              {/* <h1>Smart Contract Address:{SMARTCONTRACTSADRESS}</h1> */}
+              {/* <h1>Balance: {balance} ETH</h1> */}
+
           <Dropdown
             data={coinData}
             price={price}
             selectedValue={smAddress}
-            placeholder={"Select coin"}
+            placeholder={"Choose one coin"}
             onSelectItem={(p) => setSmAddress(p.value as string)}
           />
 
@@ -178,13 +204,13 @@ export default function UpDownContainer() {
             <OptionButton
               text="UP"
               w="full"
-              isDisabled={headTail != UP_DOWN_TYPE.HEAD}
+              isDisabled={headTail !== UP_DOWN_TYPE.HEAD}
               onClick={() => setHeadTail(UP_DOWN_TYPE.HEAD)}
             />
             <OptionButton
               text="DOWN"
-              isDisabled={headTail !== UP_DOWN_TYPE.TAIL}
               w="full"
+              isDisabled={headTail !== UP_DOWN_TYPE.TAIL}
               onClick={() => setHeadTail(UP_DOWN_TYPE.TAIL)}
             />
           </SimpleGrid>
@@ -193,7 +219,11 @@ export default function UpDownContainer() {
             <div>
               <OptionButton
                 w="full"
-                text={!walletInfo.address ? "CONNECT YOUR WALLET" : `BID 0.05 ETH (don't click)`}
+                text={
+                  !walletInfo.address
+                    ? "CONNECT YOUR WALLET"
+                    : `BID 0.05 ETH (don't click)`
+                }
                 bgColor={"orange"}
                 mt="30px !important"
                 isDisabled={
@@ -221,7 +251,7 @@ export default function UpDownContainer() {
             </div>
           )}
           <Flex mt="80px" mb="20px" />
-          {countDown && (
+          {countDown > 0 && (
             <OptionButton
               text={`${countDown}`}
               isDisabled={false}
@@ -239,4 +269,5 @@ export default function UpDownContainer() {
       </Flex>
     </>
   );
+
 }
